@@ -1,0 +1,452 @@
+---
+title: "2024 Paris Olympic Network Analysis"
+author: "Jangmin Song"
+date: "2025-04-08"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#setwd("~/Desktop/Academics 24-25/DCS 375 Network Analysis/Final Project/2024_Paris_Olympic_Network_Analysis")
+
+# Store string containing all required packages
+my_packages <- c('bipartite', 'RColorBrewer', 'igraph')
+```
+
+Libraries
+```{r library, results='hide'}
+library(dplyr)
+library(readxl)
+library(stringr)
+library(ggplot2)
+library(RColorBrewer)
+library(stringr)
+```
+
+Figure out which of these packages is already installed
+``` {r package, results='hide'}
+# Store all installed packages
+ya_installed <- library()$results[,1]
+# Check whether required packages are already installed and grab only those that still need installation
+need_install<-my_packages[!(my_packages %in% ya_installed)]
+#install required packages
+lapply({need_install}, install.packages, character.only = TRUE)
+```
+
+Now, load only unloaded packages
+``` {r loading packages, results='hide'}
+# Store all installed packages
+ya_loaded <- (.packages())
+# Check whether required packages are already installed and grab only those that still need installation
+need_load<-my_packages[!(my_packages %in% ya_loaded)]
+# Load required packages
+lapply(need_load, require, character.only = TRUE)
+```
+
+### Read in Data  
+``` {r reading data}
+athletes_full<-read.csv("athletes.csv")
+athletes <- athletes_full %>%
+  select(name, country, disciplines, events, birth_date)
+
+medals_full <-read.csv("medallists.csv")
+medals <- medals_full %>%
+  select(name, medal_type, medal_code, country, discipline, event)
+
+#Data Cleaning
+athletes$disciplines <- str_replace_all(athletes$disciplines, "\\['", "")
+athletes$disciplines <- str_replace_all(athletes$disciplines, "'\\]", "")
+athletes$disciplines <- str_replace_all(athletes$disciplines, "\\[\"", "")
+athletes$disciplines <- str_replace_all(athletes$disciplines, "\"\\]", "")
+
+athletes$events <- str_replace_all(athletes$events, "\\['", "")
+athletes$events <- str_replace_all(athletes$events, "'\\]", "")
+athletes$events <- str_replace_all(athletes$events, "\\[\"", "")
+athletes$events <- str_replace_all(athletes$events, "\"\\]", "")
+
+medals$medal_type <- str_replace_all(medals$medal_type, " Medal", "")
+```
+
+
+### Creating the bipartite graphs
+```{r}
+#Creating webID
+athletes_webID <- data.frame(matrix("olympicweb", nrow = nrow(athletes), ncol = 1))
+new_athletes <- cbind(athletes, athletes_webID)
+colnames(new_athletes)<- c("name", "country", "disciplines", "events", "birth_date", "webID")
+```
+
+### Plotting network interactions between two node types 
+```{r create the web}
+#Generate the graph object using frame2webs()
+web_athletes <- frame2webs(new_athletes, varnames = c("country", "disciplines", "webID"), type.out = "list", emptylist = TRUE)
+```
+
+### Bipartite Graph of new_athletes
+```{r bipartite graph visualization, fit.alt="Bipartite network graph showing athletes connected to their countries and disciplines. Countries with more participants appear more central and connected."}
+#creating a color vector
+cols1 <-c( '#8214a0', '#005ac8', '#00a0fa', '#fa78fa', '#14d2dc', '#aa0a3c', '#fa7850', '#0ab45a', '#f0f032', '#a0fa82', '#fae6be') 
+#plotting the two-dimensional matrix to a bipartite graph
+plotweb(web_athletes$"olympicweb", method='cca', labsize=1.2, x.lim=c(0,4), y.lim=c(-0.6,2.8), text.rot=90, col.interaction=cols1, bor.col.interaction=cols1) 
+title("Athlete and Country Bipartite Network")
+
+```
+
+```{r saving as png}
+png("img/athlete_country_bipartite.png", width = 3000, height = 1200, res = 300)
+plotweb(web_athletes$"olympicweb", method = 'cca', labsize=0.6, y.lim=c(-0.5,2), text.rot = 90, 
+        col.interaction = cols1, bor.col.interaction = cols1)
+dev.off()
+```
+
+### Simplifying bipartite
+```{r merging all the countries that have less than or equal to 15 athletes as "Other Countries"}
+#15 or less country, put as other countries
+athletes_by_country <- athletes %>%
+  count(country, name = "num_athletes")
+small_country <- athletes_by_country %>%
+  filter(num_athletes <= 15) %>%
+  pull(country)
+athletes_cleaned <- athletes %>%
+  mutate(country = ifelse(country %in% small_country, "Other Countries", country))
+#Creating webID
+athletes_cleaned_webID <- data.frame(matrix("olympicweb", nrow = nrow(athletes_cleaned), ncol = 1))
+new_athletes_cleaned <- cbind(athletes_cleaned, athletes_cleaned_webID)
+colnames(new_athletes_cleaned)<- c("name", "country", "disciplines", "events", "birth_date", "webID")
+```
+
+### Plotting network interactions between two node types 
+```{r creating the new graph object with "Other Countries"}
+#Generate the graph object using frame2webs()
+web_cleaned_athletes <- frame2webs(new_athletes_cleaned, varnames = c("country", "disciplines", "webID"), type.out = "list", emptylist = TRUE)
+```
+
+### Bipartite Graph of new_athletes
+```{r bipartite graph visualization with "Other Countries", fig.alt="Simplified bipartite network where countries with 15 or fewer athletes are grouped into an ‘Other Countries’ node to reduce visual clutter."}
+#creating a color vector
+cols1 <-c( '#8214a0', '#005ac8', '#00a0fa', '#fa78fa', '#14d2dc', '#aa0a3c', '#fa7850', '#0ab45a', '#f0f032', '#a0fa82', '#fae6be') 
+#plotting the two-dimensional matrix to a bipartite graph
+plotweb(web_cleaned_athletes$"olympicweb", method='cca', labsize=1.2, x.lim=c(0,4), y.lim=c(-0.6,2.8), text.rot=90, col.interaction=cols1, bor.col.interaction=cols1)      
+title("Simplified Athlete and Country Bipartite Network")
+```
+
+```{r saving as png 2}
+# Save as PNG
+png("img/simple_athlete_country_bipartite.png", width = 3000, height = 1200, res = 300)
+plotweb(web_cleaned_athletes$"olympicweb", method='cca', labsize=0.6, y.lim=c(-0.2,2), text.rot=90,
+        col.interaction=cols1, bor.col.interaction=cols1)      
+dev.off()
+```
+
+### Bottom 20 bipartite uni-modal bipartite network
+```{r bottom 20 bipartite uni-modal, fig.alt="PAC network showing connections between the bottom 20 countries by number of athletes and the disciplines they participated in. It shows overlapping disciplines among smaller delegations."}
+#find bottom 20 athletes attending countries
+bottom_20_countrys <- athletes_by_country %>%
+  slice_min(num_athletes, n = 20) %>%
+  pull(country)
+athletes_bottom20 <- athletes %>%
+  filter(country %in% bottom_20_countrys)
+athletes_bottom20_webID <- data.frame(matrix("olympicweb", nrow = nrow(athletes_bottom20), ncol = 1))
+new_athletes_bottom20 <- cbind(athletes_bottom20, athletes_bottom20_webID)
+colnames(new_athletes_bottom20)<- c("name", "country", "disciplines", "events", "birth_date", "webID")
+web_new_athletes_bottom20 <- frame2webs(new_athletes_bottom20, varnames = c("country", "disciplines", "webID"), type.out = "list", emptylist = TRUE)
+web_mat <- web_new_athletes_bottom20$"olympicweb"
+#Plot
+par(mar = c(5, 5, 5, 5))  
+plotPAC(
+  web_mat,
+  scaling = 2,
+  fill.col = rgb(0, 110/255, 130/255, 0.5),
+  arrow.col = rgb(0, 110/255, 130/255, 0.5)
+)
+rownames(new_athletes_bottom20$"olympicweb")
+```
+Bhutan and Chad share Archery and Athletics, and Sao Tome and Principe and Chad share Athletics and Judo
+
+```{r bottom 20 bipartite uni-modal png}
+png("img/unimodal.png", width = 4000, height = 2000, res = 300)
+set.seed(2)
+par(mar = c(5, 5, 5, 5)) 
+plotPAC(
+  web_mat,
+  scaling = 2,
+  fill.col = rgb(0, 110/255, 130/255, 0.5),
+  arrow.col = rgb(0, 110/255, 130/255, 0.5)
+)
+rownames(new_athletes_bottom20$"olympicweb")
+dev.off()
+```
+
+### Bar chart of top 20 athletes attending countries
+```{r top 20 bipartite, fig.alt="Bar chart showing the top 20 countries with the highest number of athletes. Shows countries like the United States, China, and France as top participants."}
+athletes_by_country <- athletes %>%
+  count(country, name = "num_athletes") %>%
+  arrange(desc(num_athletes))
+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+top_countrys <- athletes_by_country %>% slice_max(num_athletes, n = 20)
+
+ggplot(top_countrys, aes(x = reorder(country, -num_athletes), y = num_athletes)) +
+  geom_bar(stat = "identity", fill = "green") +
+  labs(title = "Number of Athletes per Country/country",
+       x = "Country/country",
+       y = "Number of Athletes") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+```
+
+```{r top 20 bipartite png}
+# Save as PNG
+png("img/num_athletes_vs_top_country.png", width = 3000, height = 1200, res = 300)
+ggplot(top_countrys, aes(x = reorder(country, -num_athletes), y = num_athletes)) +
+  geom_bar(stat = "identity", fill = "green") +
+  labs(title = "Number of Athletes per Country/country",
+       x = "Country/country",
+       y = "Number of Athletes") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+dev.off()
+```
+
+### Bar chart of bottom 20 athletes attending countries
+```{r bottom 20 bipartite, fig.alt="Bar chart showing the bottom 20 countries by number of athletes sent to the Olympics. Countries with only one, two, or three representatives are included."}
+bottom_countrys <- athletes_by_country %>%
+  slice_min(num_athletes, n = 20)
+
+ggplot(bottom_countrys, aes(x = reorder(country, num_athletes), y = num_athletes)) +
+  geom_bar(stat = "identity", fill = "green") +
+  labs(title = "Bottom 20 Countries by Number of Athletes",
+       x = "Country/country",
+       y = "Number of Athletes") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r bottom 20 bipartite png}
+# Save as PNG
+png("img/num_athletes_vs_bottom_country.png", width = 3000, height = 1200, res = 300)
+ggplot(bottom_countrys, aes(x = reorder(country, num_athletes), y = num_athletes)) +
+  geom_bar(stat = "identity", fill = "green") +
+  labs(title = "Bottom 20 Countries by Number of Athletes",
+       x = "Country/country",
+       y = "Number of Athletes") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+dev.off()
+```
+
+### Making Japan Medalists Network
+```{r}
+name_medal <- as.matrix(cbind(medals$name, medals$medal_type))
+japan_medalist <- as.matrix(cbind(name_medal,medals$country))
+japan_medalist<-as.data.frame(japan_medalist)
+japan_medalist <- japan_medalist %>%
+  filter(V3 == "Japan") %>%
+  select(V1, V2)
+japan_medalist <- as.matrix(japan_medalist)
+japan_medalist.g <- graph_from_edgelist(japan_medalist, directed = FALSE)
+V(japan_medalist.g)$type <- bipartite_mapping(japan_medalist.g)$type
+bipart_data_japan <- as_biadjacency_matrix(japan_medalist.g)
+#Creating sociomatrix for medalist
+japan_medalist.mat <- bipart_data_japan %*% t(bipart_data_japan) 
+#show athletes_medalist.mat matrix
+diag(japan_medalist.mat) <- NA
+```
+
+```{r}
+#create graph
+japan_medalist.g <- graph_from_adjacency_matrix(japan_medalist.mat, mode="undirected")
+```
+
+```{r japan medalist network, fig.alt="Japanese medalist network colored by medal type. Includes tight clustering of athletes with similar medal results, and Oka Shinnosuke as a central connecting node."}
+set.seed(1)
+#I asked Chat GPT for good clustering function and offered me cluster_louvain()
+japan_clusters <- cluster_louvain(japan_medalist.g)
+V(japan_medalist.g)$cluster <- japan_clusters$membership
+jp_medal_colors <- case_when(
+  japan_clusters$membership == 1 ~ "darkgreen",
+  japan_clusters$membership == 2 ~ "gold",
+  japan_clusters$membership == 3 ~ "grey"
+)
+
+
+#layout setting
+la <- layout_with_fr(japan_medalist.g, niter = 1000000, area = vcount(japan_medalist.g)^8)
+#edge list setting
+e.wt <- edge_attr(japan_medalist.g, "weight")
+v.wt <- strength(japan_medalist.g, mode = "all")
+v.size <- v.wt / max(v.wt) * 10  # scale node sizes between 0 and 30
+#plot instructor network
+plot(japan_medalist.g, 
+     layout=la,
+     vertex.size=v.size,
+     edge.width=e.wt,
+     vertex.color = jp_medal_colors,
+     vertex.label= V(japan_medalist.g)$name,
+     vertex.label.cex = 0.8,
+     main = "Japanese Medalist Clustering Based on Shared Medal Types"
+     )
+
+```
+
+```{r japan medalist network png}
+png("img/japan_medalist_cluster.png", width = 3000, height = 3000, res = 300)
+set.seed(3)
+plot(japan_medalist.g, 
+     layout=la,
+     vertex.size=v.size,
+     edge.width=e.wt,
+     vertex.color = jp_medal_colors,
+     vertex.label= V(japan_medalist.g)$name,
+     vertex.label.cex = 0.8,
+     main = "Japanese Medalist Clustering Based on Shared Medal Types"
+     )
+dev.off()
+```
+
+### Statistical Analysis
+```{r}
+# Edge Density
+edge_density(japan_medalist.g)
+
+# Transitivity (clustering coefficient)
+transitivity(japan_medalist.g)
+
+# Betweenness Centrality
+btw <- betweenness(japan_medalist.g)
+head(sort(btw, decreasing = TRUE), 5)
+=
+```
+
+### Making Medalists Network
+```{r}
+name_medal <- as.matrix(cbind(medals$name, medals$medal_type))
+g_medal <- graph_from_edgelist(name_medal, directed = FALSE)
+V(g_medal)$type <- bipartite_mapping(g_medal)$type
+
+# Create biadjacency matrix
+bipart_data <- as_biadjacency_matrix(g_medal)
+
+# Project to name–name matrix
+medalist_mat <- bipart_data %*% t(bipart_data)
+diag(medalist_mat) <- 0
+
+# Create graph
+medalist_g <- graph_from_adjacency_matrix(medalist_mat, mode = "undirected", weighted = TRUE)
+
+#I asked Chat GPT for good clustering function and offered me cluster_louvain()
+clusters <- cluster_louvain(medalist_g)
+V(medalist_g)$cluster <- clusters$membership
+```
+
+```{r, fig.alt="Network graph showing medalist clustering by medal type, such as gold, silver, and bronze. Athletes are grouped based on the kind of medal they received."}
+# Define colors based on cluster membership and what each cluster represents
+medal_colors <- case_when(
+  clusters$membership == 1 ~ "gold",
+  clusters$membership == 2 ~ "grey",
+  clusters$membership == 3 ~ "darkgreen"
+)
+layout_medal <- layout_with_fr(medalist_g)
+plot(medalist_g,
+     layout = layout_medal,
+     vertex.size = 5,
+     vertex.label = NA,
+     vertex.color = medal_colors,
+     edge.width = E(medalist_g)$weight / max(E(medalist_g)$weight) * 5,
+     main = "Medalist Clustering Based on Shared Medal Types")
+```
+
+```{r medalist clustering png}
+png("img/medalist_cluster.png", width = 3000, height = 3000, res = 300)
+set.seed(1)
+layout_medal <- layout_with_fr(medalist_g)
+plot(medalist_g,
+     layout = layout_medal,
+     vertex.size = 5,
+     vertex.label = NA,
+     vertex.color = medal_colors,
+     edge.width = E(medalist_g)$weight / max(E(medalist_g)$weight) * 5,
+     main = "Medalist Clustering Based on Shared Medal Types")
+dev.off()
+```
+
+```{r}
+country_discipline <- as.matrix(cbind(athletes$country, athletes$disciplines))
+
+g_cd <- graph_from_edgelist(country_discipline, directed = FALSE)
+V(g_cd)$type <- bipartite_mapping(g_cd)$type
+bipart_cd <- as_biadjacency_matrix(g_cd)
+country_mat <- bipart_cd %*% t(bipart_cd)
+diag(country_mat) <- 0
+g_country <- graph_from_adjacency_matrix(country_mat, mode = "undirected", weighted = TRUE)
+```
+
+```{r, fig.alt="Projected one mode country network based on shared Olympic disciplines of all the countries."}
+layout_country <- layout_with_fr(g_country)
+plot(g_country,
+     layout = layout_country,
+     vertex.size = 5,
+     vertex.label.cex = 0.7,
+     vertex.label = V(g_country)$name,
+     edge.width = E(g_country)$weight / max(E(g_country)$weight) * 5,
+     main = "Country Collaboration Network by Shared Disciplines")
+```
+Projected one mode country network based on shared Olympic disciplines
+```{r}
+#count number of disciplines per country
+country_discipline_count <- athletes %>%
+  distinct(country, disciplines) %>%         
+  count(country, name = "num_disciplines") %>%
+  filter(num_disciplines > 15)               
+
+#filter original data
+filtered_athletes <- athletes %>%
+  filter(country %in% country_discipline_count$country)
+
+#create bipartite edge list
+country_discipline <- as.matrix(cbind(filtered_athletes$country, filtered_athletes$disciplines))
+g_cd <- graph_from_edgelist(country_discipline, directed = FALSE)
+V(g_cd)$type <- bipartite_mapping(g_cd)$type
+
+#create biadjacency matrix and project
+bipart_cd <- as_biadjacency_matrix(g_cd)
+country_mat <- bipart_cd %*% t(bipart_cd)
+diag(country_mat) <- 0
+
+#graph
+g_country <- graph_from_adjacency_matrix(country_mat, mode = "undirected", weighted = TRUE)
+g_country <- delete_edges(g_country, E(g_country)[weight == 0])
+
+top_countries <- country_discipline_count %>%
+  arrange(desc(num_disciplines)) %>%
+  slice(1:10) %>%
+  pull(country)
+V(g_country)$color <- ifelse(V(g_country)$name %in% top_countries, "red", "gold")
+```
+
+Projected one mode country network based on shared Olympic disciplines
+```{r one mode country network, fig.alt="Projected one mode country network based on shared Olympic disciplines. Countries that particiated more than 15 disciplines are selected. Countries are connected if their athletes participated in the same disciplines. Top 10 most active countries are highlighted in red and this shows the high connectivity"}
+set.seed(2)
+layout_country <- layout_with_fr(g_country)
+plot(g_country,
+     layout = layout_country,
+     vertex.size = 6,
+     vertex.label.cex = 0.7,
+     vertex.label = V(g_country)$name,
+     vertex.color = V(g_country)$color,
+     edge.width = E(g_country)$weight / max(E(g_country)$weight) * 5,
+     main = "Country Collaboration Network with Top 10 in Red")
+```
+
+```{r}
+png("img/top10_country_collaboration_network.png", width = 2000, height = 2000, res = 300)
+set.seed(1)
+plot(g_country,
+     layout = layout_country,
+     vertex.size = 6,
+     vertex.label.cex = 0.7,
+     vertex.label = V(g_country)$name,
+     vertex.color = V(g_country)$color,
+     edge.width = E(g_country)$weight / max(E(g_country)$weight) * 5,
+     main = "Country Collaboration Network with Top 10 in Red")
+```
+
